@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaRobot, FaCube, FaTree, FaPlay, FaStop, FaCheckCircle, FaPlus } from 'react-icons/fa';
+import { FaRobot, FaCube, FaTree, FaPlay, FaStop, FaCheckCircle, FaPlus, FaTrash } from 'react-icons/fa';
 import api from '../services/api';
 import '../styles/SimulationLauncher.css';
 
@@ -14,9 +14,27 @@ const SimulationLauncher = () => {
   const [worldConfig, setWorldConfig] = useState({
     world_name: 'empty',
     headless: false,
-    objects: [],
-    environments: []
+    objects: [],      // Will be array of object instances
+    environments: []  // Will be array of environment instances
   });
+  
+  // Object/Environment type definitions
+  const objectTypes = {
+    box_mini: { name: 'Box Mini', icon: '📦', defaultPose: { x: 1.3, y: 18.7, z: 2.82, qx: 0, qy: 0, qz: 0, qw: 1 } },
+    plastic_box: { name: 'Plastic Box', icon: '🗃️', defaultPose: { x: 41.335468, y: 9.3227, z: 0.444936, qx: 0, qy: 0, qz: 0.7071068, qw: 0.7071068 } },
+    line_1000: { name: 'Line 1000', icon: '➖', defaultPose: { x: 45.385, y: 3.750, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 } }
+  };
+  
+  const environmentTypes = {
+    inbound_driveway_rail: { name: 'Inbound Driveway Rail', icon: '🛤️', defaultPose: { x: 44.96, y: -7.0, z: -0.003569, qx: 0, qy: 0, qz: 1, qw: 0 } },
+    product_aisle_bay: { name: 'Product Aisle Bay', icon: '🏪', defaultPose: { x: 40.999336, y: 8.435519, z: -0.030416, qx: 0, qy: 0, qz: 0, qw: 1 } }
+  };
+  
+  // State for adding new objects/environments
+  const [newObjectType, setNewObjectType] = useState('box_mini');
+  const [newObjectPose, setNewObjectPose] = useState(objectTypes.box_mini.defaultPose);
+  const [newEnvironmentType, setNewEnvironmentType] = useState('inbound_driveway_rail');
+  const [newEnvironmentPose, setNewEnvironmentPose] = useState(environmentTypes.inbound_driveway_rail.defaultPose);
 
   // Robot configuration (for spawning)
   const [robotConfig, setRobotConfig] = useState({
@@ -28,8 +46,6 @@ const SimulationLauncher = () => {
     }
   });
 
-  const [availableObjects, setAvailableObjects] = useState([]);
-  const [availableEnvironments, setAvailableEnvironments] = useState([]);
   const [activeSessions, setActiveSessions] = useState({});
   const [worldSessionId, setWorldSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -37,9 +53,8 @@ const SimulationLauncher = () => {
   const [success, setSuccess] = useState(null);
   const [apiStatus, setApiStatus] = useState('unknown');
 
-  // Fetch available objects and environments on mount
+  // Check API health and fetch sessions on mount
   useEffect(() => {
-    fetchResources();
     checkApiHealth();
     const interval = setInterval(fetchActiveSessions, 3000);
     return () => clearInterval(interval);
@@ -51,19 +66,6 @@ const SimulationLauncher = () => {
       setApiStatus('healthy');
     } catch (err) {
       setApiStatus('offline');
-    }
-  };
-
-  const fetchResources = async () => {
-    try {
-      const [objectsRes, envsRes] = await Promise.all([
-        api.getObjects(),
-        api.getEnvironments()
-      ]);
-      setAvailableObjects(objectsRes.objects || []);
-      setAvailableEnvironments(envsRes.environments || []);
-    } catch (err) {
-      setError('Failed to fetch available resources');
     }
   };
 
@@ -118,22 +120,56 @@ const SimulationLauncher = () => {
     }));
   };
 
-  const toggleObject = (obj) => {
+  // Handlers for adding/removing objects
+  const handleAddObject = () => {
+    const newInstance = {
+      id: Date.now(), // Unique ID
+      type: newObjectType,
+      name: `${newObjectType}_${worldConfig.objects.length + 1}`,
+      pose: { ...newObjectPose }
+    };
     setWorldConfig(prev => ({
       ...prev,
-      objects: prev.objects.includes(obj)
-        ? prev.objects.filter(o => o !== obj)
-        : [...prev.objects, obj]
+      objects: [...prev.objects, newInstance]
     }));
   };
 
-  const toggleEnvironment = (env) => {
+  const handleRemoveObject = (id) => {
     setWorldConfig(prev => ({
       ...prev,
-      environments: prev.environments.includes(env)
-        ? prev.environments.filter(e => e !== env)
-        : [...prev.environments, env]
+      objects: prev.objects.filter(obj => obj.id !== id)
     }));
+  };
+
+  const handleAddEnvironment = () => {
+    const newInstance = {
+      id: Date.now(),
+      type: newEnvironmentType,
+      name: `${newEnvironmentType}_${worldConfig.environments.length + 1}`,
+      pose: { ...newEnvironmentPose }
+    };
+    setWorldConfig(prev => ({
+      ...prev,
+      environments: [...prev.environments, newInstance]
+    }));
+  };
+
+  const handleRemoveEnvironment = (id) => {
+    setWorldConfig(prev => ({
+      ...prev,
+      environments: prev.environments.filter(env => env.id !== id)
+    }));
+  };
+
+  // Handler when object type changes - update pose to default
+  const handleObjectTypeChange = (type) => {
+    setNewObjectType(type);
+    setNewObjectPose(objectTypes[type].defaultPose);
+  };
+
+  const handleEnvironmentTypeChange = (type) => {
+    setNewEnvironmentType(type);
+    setNewEnvironmentPose(environmentTypes[type].defaultPose);
   };
 
   const handleLaunchWorld = async () => {
@@ -365,35 +401,247 @@ const SimulationLauncher = () => {
                 {/* Objects Selection */}
                 <section className="config-section">
                   <h2><FaCube /> Objects</h2>
-                  <div className="selection-grid">
-                    {availableObjects.map(obj => (
-                      <div
-                        key={obj}
-                        className={`selection-item ${worldConfig.objects.includes(obj) ? 'selected' : ''}`}
-                        onClick={() => toggleObject(obj)}
-                      >
-                        <FaCube />
-                        <span>{obj}</span>
+                  
+                  {/* Add Object Form */}
+                  <div className="add-item-form">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Type</label>
+                        <select 
+                          value={newObjectType} 
+                          onChange={(e) => handleObjectTypeChange(e.target.value)}
+                        >
+                          {Object.entries(objectTypes).map(([key, value]) => (
+                            <option key={key} value={key}>
+                              {value.icon} {value.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Position */}
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Position X</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newObjectPose.x}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, x: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Position Y</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newObjectPose.y}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, y: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Position Z</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newObjectPose.z}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, z: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Orientation (Quaternion) */}
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Quat X</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newObjectPose.qx}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, qx: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat Y</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newObjectPose.qy}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, qy: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat Z</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newObjectPose.qz}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, qz: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat W</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newObjectPose.qw}
+                          onChange={(e) => setNewObjectPose(prev => ({ ...prev, qw: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    <button className="btn btn-secondary" onClick={handleAddObject}>
+                      <FaPlus /> Add Object
+                    </button>
                   </div>
+
+                  {/* List of added objects */}
+                  {worldConfig.objects.length > 0 && (
+                    <div className="added-items-list">
+                      <h3>Added Objects ({worldConfig.objects.length})</h3>
+                      {worldConfig.objects.map(obj => (
+                        <div key={obj.id} className="added-item">
+                          <span className="item-icon">{objectTypes[obj.type].icon}</span>
+                          <span className="item-name">{obj.name}</span>
+                          <span className="item-type">({objectTypes[obj.type].name})</span>
+                          <span className="item-pos">
+                            [{obj.pose.x.toFixed(2)}, {obj.pose.y.toFixed(2)}, {obj.pose.z.toFixed(2)}]
+                          </span>
+                          <button 
+                            className="btn-icon btn-danger" 
+                            onClick={() => handleRemoveObject(obj.id)}
+                            title="Remove"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 {/* Environment Selection */}
                 <section className="config-section">
                   <h2><FaTree /> Environment</h2>
-                  <div className="selection-grid">
-                    {availableEnvironments.map(env => (
-                      <div
-                        key={env}
-                        className={`selection-item ${worldConfig.environments.includes(env) ? 'selected' : ''}`}
-                        onClick={() => toggleEnvironment(env)}
-                      >
-                        <FaTree />
-                        <span>{env}</span>
+                  
+                  {/* Add Environment Form */}
+                  <div className="add-item-form">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Type</label>
+                        <select 
+                          value={newEnvironmentType} 
+                          onChange={(e) => handleEnvironmentTypeChange(e.target.value)}
+                        >
+                          {Object.entries(environmentTypes).map(([key, value]) => (
+                            <option key={key} value={key}>
+                              {value.icon} {value.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Position */}
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Position X</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newEnvironmentPose.x}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, x: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Position Y</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newEnvironmentPose.y}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, y: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Position Z</label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          value={newEnvironmentPose.z}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, z: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Orientation (Quaternion) */}
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Quat X</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newEnvironmentPose.qx}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, qx: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat Y</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newEnvironmentPose.qy}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, qy: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat Z</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newEnvironmentPose.qz}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, qz: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Quat W</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={newEnvironmentPose.qw}
+                          onChange={(e) => setNewEnvironmentPose(prev => ({ ...prev, qw: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    <button className="btn btn-secondary" onClick={handleAddEnvironment}>
+                      <FaPlus /> Add Environment
+                    </button>
                   </div>
+
+                  {/* List of added environments */}
+                  {worldConfig.environments.length > 0 && (
+                    <div className="added-items-list">
+                      <h3>Added Environments ({worldConfig.environments.length})</h3>
+                      {worldConfig.environments.map(env => (
+                        <div key={env.id} className="added-item">
+                          <span className="item-icon">{environmentTypes[env.type].icon}</span>
+                          <span className="item-name">{env.name}</span>
+                          <span className="item-type">({environmentTypes[env.type].name})</span>
+                          <span className="item-pos">
+                            [{env.pose.x.toFixed(2)}, {env.pose.y.toFixed(2)}, {env.pose.z.toFixed(2)}]
+                          </span>
+                          <button 
+                            className="btn-icon btn-danger" 
+                            onClick={() => handleRemoveEnvironment(env.id)}
+                            title="Remove"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 {/* World Launch Button */}
