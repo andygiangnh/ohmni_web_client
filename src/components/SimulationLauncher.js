@@ -6,6 +6,9 @@ import '../styles/SimulationLauncher.css';
 const SimulationLauncher = () => {
   // Tab state
   const [activeTab, setActiveTab] = useState('world');
+  
+  // Orientation input mode: 'rpy' or 'quaternion'
+  const [orientationMode, setOrientationMode] = useState('rpy');
 
   // World configuration (no robot)
   const [worldConfig, setWorldConfig] = useState({
@@ -170,9 +173,18 @@ const SimulationLauncher = () => {
 
     setLoading(true);
     try {
+      // Convert orientation to quaternion if in RPY mode
+      const { roll, pitch, yaw } = robotConfig.pose.orientation_rpy;
+      const quaternion = rpyToQuaternion(roll, pitch, yaw);
+      
       const payload = {
         world_session_id: worldSessionId,
-        ...robotConfig
+        robot_name: robotConfig.robot_name,
+        robot_type: robotConfig.robot_type,
+        pose: {
+          position: robotConfig.pose.position,
+          orientation_rpy: robotConfig.pose.orientation_rpy
+        }
       };
       const response = await api.spawnRobot(payload);
       if (response.success) {
@@ -253,6 +265,42 @@ const SimulationLauncher = () => {
 
   const degreesToRadians = (degrees) => (degrees * Math.PI / 180).toFixed(4);
   const radiansToDegrees = (radians) => (radians * 180 / Math.PI).toFixed(2);
+
+  // Convert RPY (radians) to Quaternion
+  const rpyToQuaternion = (roll, pitch, yaw) => {
+    const cy = Math.cos(yaw * 0.5);
+    const sy = Math.sin(yaw * 0.5);
+    const cp = Math.cos(pitch * 0.5);
+    const sp = Math.sin(pitch * 0.5);
+    const cr = Math.cos(roll * 0.5);
+    const sr = Math.sin(roll * 0.5);
+
+    return {
+      x: sr * cp * cy - cr * sp * sy,
+      y: cr * sp * cy + sr * cp * sy,
+      z: cr * cp * sy - sr * sp * cy,
+      w: cr * cp * cy + sr * sp * sy
+    };
+  };
+
+  // Convert Quaternion to RPY (radians)
+  const quaternionToRpy = (x, y, z, w) => {
+    // Roll (x-axis rotation)
+    const sinr_cosp = 2 * (w * x + y * z);
+    const cosr_cosp = 1 - 2 * (x * x + y * y);
+    const roll = Math.atan2(sinr_cosp, cosr_cosp);
+
+    // Pitch (y-axis rotation)
+    const sinp = 2 * (w * y - z * x);
+    const pitch = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+
+    // Yaw (z-axis rotation)
+    const siny_cosp = 2 * (w * z + x * y);
+    const cosy_cosp = 1 - 2 * (y * y + z * z);
+    const yaw = Math.atan2(siny_cosp, cosy_cosp);
+
+    return { roll, pitch, yaw };
+  };
 
   return (
     <div className="simulation-launcher">
@@ -430,39 +478,170 @@ const SimulationLauncher = () => {
                     </div>
                   </div>
 
-                  <h3>Orientation (radians / degrees)</h3>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Roll</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={robotConfig.pose.orientation_rpy.roll}
-                        onChange={(e) => handleOrientationChange('roll', e.target.value)}
-                      />
-                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.roll)}°</small>
-                    </div>
-                    <div className="form-group">
-                      <label>Pitch</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={robotConfig.pose.orientation_rpy.pitch}
-                        onChange={(e) => handleOrientationChange('pitch', e.target.value)}
-                      />
-                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.pitch)}°</small>
-                    </div>
-                    <div className="form-group">
-                      <label>Yaw</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={robotConfig.pose.orientation_rpy.yaw}
-                        onChange={(e) => handleOrientationChange('yaw', e.target.value)}
-                      />
-                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.yaw)}°</small>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                    <h3>Orientation</h3>
+                    <div className="form-group" style={{ flexDirection: 'row', gap: '0.5rem', alignItems: 'center', marginBottom: 0 }}>
+                      <label style={{ marginBottom: 0 }}>Input Mode:</label>
+                      <select
+                        value={orientationMode}
+                        onChange={(e) => setOrientationMode(e.target.value)}
+                        style={{ width: 'auto' }}
+                      >
+                        <option value="rpy">Roll-Pitch-Yaw</option>
+                        <option value="quaternion">Quaternion</option>
+                      </select>
                     </div>
                   </div>
+
+                  {orientationMode === 'rpy' ? (
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Roll (radians)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={robotConfig.pose.orientation_rpy.roll}
+                          onChange={(e) => handleOrientationChange('roll', e.target.value)}
+                        />
+                        <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.roll)}°</small>
+                      </div>
+                      <div className="form-group">
+                        <label>Pitch (radians)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={robotConfig.pose.orientation_rpy.pitch}
+                          onChange={(e) => handleOrientationChange('pitch', e.target.value)}
+                        />
+                        <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.pitch)}°</small>
+                      </div>
+                      <div className="form-group">
+                        <label>Yaw (radians)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={robotConfig.pose.orientation_rpy.yaw}
+                          onChange={(e) => handleOrientationChange('yaw', e.target.value)}
+                        />
+                        <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.yaw)}°</small>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>X</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={rpyToQuaternion(
+                            robotConfig.pose.orientation_rpy.roll,
+                            robotConfig.pose.orientation_rpy.pitch,
+                            robotConfig.pose.orientation_rpy.yaw
+                          ).x.toFixed(4)}
+                          onChange={(e) => {
+                            const quat = rpyToQuaternion(
+                              robotConfig.pose.orientation_rpy.roll,
+                              robotConfig.pose.orientation_rpy.pitch,
+                              robotConfig.pose.orientation_rpy.yaw
+                            );
+                            quat.x = parseFloat(e.target.value) || 0;
+                            const rpy = quaternionToRpy(quat.x, quat.y, quat.z, quat.w);
+                            setRobotConfig(prev => ({
+                              ...prev,
+                              pose: {
+                                ...prev.pose,
+                                orientation_rpy: rpy
+                              }
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Y</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={rpyToQuaternion(
+                            robotConfig.pose.orientation_rpy.roll,
+                            robotConfig.pose.orientation_rpy.pitch,
+                            robotConfig.pose.orientation_rpy.yaw
+                          ).y.toFixed(4)}
+                          onChange={(e) => {
+                            const quat = rpyToQuaternion(
+                              robotConfig.pose.orientation_rpy.roll,
+                              robotConfig.pose.orientation_rpy.pitch,
+                              robotConfig.pose.orientation_rpy.yaw
+                            );
+                            quat.y = parseFloat(e.target.value) || 0;
+                            const rpy = quaternionToRpy(quat.x, quat.y, quat.z, quat.w);
+                            setRobotConfig(prev => ({
+                              ...prev,
+                              pose: {
+                                ...prev.pose,
+                                orientation_rpy: rpy
+                              }
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Z</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={rpyToQuaternion(
+                            robotConfig.pose.orientation_rpy.roll,
+                            robotConfig.pose.orientation_rpy.pitch,
+                            robotConfig.pose.orientation_rpy.yaw
+                          ).z.toFixed(4)}
+                          onChange={(e) => {
+                            const quat = rpyToQuaternion(
+                              robotConfig.pose.orientation_rpy.roll,
+                              robotConfig.pose.orientation_rpy.pitch,
+                              robotConfig.pose.orientation_rpy.yaw
+                            );
+                            quat.z = parseFloat(e.target.value) || 0;
+                            const rpy = quaternionToRpy(quat.x, quat.y, quat.z, quat.w);
+                            setRobotConfig(prev => ({
+                              ...prev,
+                              pose: {
+                                ...prev.pose,
+                                orientation_rpy: rpy
+                              }
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>W</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={rpyToQuaternion(
+                            robotConfig.pose.orientation_rpy.roll,
+                            robotConfig.pose.orientation_rpy.pitch,
+                            robotConfig.pose.orientation_rpy.yaw
+                          ).w.toFixed(4)}
+                          onChange={(e) => {
+                            const quat = rpyToQuaternion(
+                              robotConfig.pose.orientation_rpy.roll,
+                              robotConfig.pose.orientation_rpy.pitch,
+                              robotConfig.pose.orientation_rpy.yaw
+                            );
+                            quat.w = parseFloat(e.target.value) || 0;
+                            const rpy = quaternionToRpy(quat.x, quat.y, quat.z, quat.w);
+                            setRobotConfig(prev => ({
+                              ...prev,
+                              pose: {
+                                ...prev.pose,
+                                orientation_rpy: rpy
+                              }
+                            }));
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* Robot Spawn Button */}
