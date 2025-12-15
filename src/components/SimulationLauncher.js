@@ -4,6 +4,9 @@ import api from '../services/api';
 import '../styles/SimulationLauncher.css';
 
 const SimulationLauncher = () => {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('world');
+
   // World configuration (no robot)
   const [worldConfig, setWorldConfig] = useState({
     world_name: 'empty',
@@ -221,6 +224,11 @@ const SimulationLauncher = () => {
       const response = await api.stopSimulation(sessionId);
       if (response.success) {
         setSuccess(`Stopped session: ${sessionId}`);
+        // Reset worldSessionId if the stopped session was the world
+        if (sessionId === worldSessionId) {
+          setWorldSessionId(null);
+          setActiveTab('world');
+        }
         fetchActiveSessions();
       }
     } catch (err) {
@@ -233,6 +241,9 @@ const SimulationLauncher = () => {
       const response = await api.stopAllSimulations();
       if (response.success) {
         setSuccess('All simulations stopped');
+        // Reset worldSessionId since all sessions are stopped
+        setWorldSessionId(null);
+        setActiveTab('world');
         fetchActiveSessions();
       }
     } catch (err) {
@@ -258,194 +269,222 @@ const SimulationLauncher = () => {
 
       <div className="content">
         <div className="main-panel">
-          {/* World Configuration */}
-          <section className="config-section">
-            <h2><FaCube /> World Configuration</h2>
-            <div className="form-group">
-              <label>World Name</label>
-              <input
-                type="text"
-                value={worldConfig.world_name}
-                onChange={(e) => handleWorldInputChange('world_name', e.target.value)}
-                placeholder="empty"
-              />
-            </div>
-            <div className="form-group checkbox">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={worldConfig.headless}
-                  onChange={(e) => handleWorldInputChange('headless', e.target.checked)}
-                />
-                Headless Mode
-              </label>
-            </div>
-          </section>
-
-          {/* Objects Selection */}
-          <section className="config-section">
-            <h2><FaCube /> Objects</h2>
-            <div className="selection-grid">
-              {availableObjects.map(obj => (
-                <div
-                  key={obj}
-                  className={`selection-item ${worldConfig.objects.includes(obj) ? 'selected' : ''}`}
-                  onClick={() => toggleObject(obj)}
-                >
-                  <FaCube />
-                  <span>{obj}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Environment Selection */}
-          <section className="config-section">
-            <h2><FaTree /> Environment</h2>
-            <div className="selection-grid">
-              {availableEnvironments.map(env => (
-                <div
-                  key={env}
-                  className={`selection-item ${worldConfig.environments.includes(env) ? 'selected' : ''}`}
-                  onClick={() => toggleEnvironment(env)}
-                >
-                  <FaTree />
-                  <span>{env}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* World Launch Button */}
-          <section className="actions">
+          {/* Tab Navigation */}
+          <div className="tab-navigation">
             <button
-              className="btn btn-primary"
-              onClick={handleLaunchWorld}
-              disabled={loading || worldSessionId}
+              className={`tab-button ${activeTab === 'world' ? 'active' : ''}`}
+              onClick={() => setActiveTab('world')}
             >
-              <FaPlay /> {loading ? 'Launching...' : worldSessionId ? 'World Active' : 'Launch World'}
+              <FaCube /> World Configuration
             </button>
-            {worldSessionId && (
-              <div className="info-box">
-                <FaCheckCircle className="success-icon" />
-                <span>World Session: {worldSessionId}</span>
-              </div>
-            )}
-          </section>
+            <button
+              className={`tab-button ${activeTab === 'robot' ? 'active' : ''}`}
+              onClick={() => setActiveTab('robot')}
+              disabled={!worldSessionId}
+            >
+              <FaRobot /> Robot Configuration
+            </button>
+          </div>
 
-          {/* Robot Configuration - Only show if world is active */}
-          {worldSessionId && (
-            <>
-              <section className="config-section">
-                <h2><FaRobot /> Robot Configuration</h2>
-                <div className="form-row">
+          {/* Tab Content */}
+          <div className="tab-content">
+            {/* World Configuration Tab */}
+            {activeTab === 'world' && (
+              <>
+                <section className="config-section">
+                  <h2><FaCube /> World Settings</h2>
                   <div className="form-group">
-                    <label>Robot Name *</label>
+                    <label>World Name</label>
                     <input
                       type="text"
-                      value={robotConfig.robot_name}
-                      onChange={(e) => handleRobotInputChange('robot_name', e.target.value)}
-                      placeholder="robot1"
-                      required
+                      value={worldConfig.world_name}
+                      onChange={(e) => handleWorldInputChange('world_name', e.target.value)}
+                      placeholder="empty"
                     />
                   </div>
-                  <div className="form-group">
-                    <label>Robot Type</label>
-                    <select
-                      value={robotConfig.robot_type}
-                      onChange={(e) => handleRobotInputChange('robot_type', e.target.value)}
-                    >
-                      <option value="symbot">Symbot</option>
-                      <option value="minibot">Minibot</option>
-                    </select>
+                  <div className="form-group checkbox">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={worldConfig.headless}
+                        onChange={(e) => handleWorldInputChange('headless', e.target.checked)}
+                      />
+                      Headless Mode
+                    </label>
                   </div>
-                </div>
+                </section>
 
-                <h3>Position (meters)</h3>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>X</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={robotConfig.pose.position.x}
-                      onChange={(e) => handlePoseChange('x', e.target.value)}
-                    />
+                {/* Objects Selection */}
+                <section className="config-section">
+                  <h2><FaCube /> Objects</h2>
+                  <div className="selection-grid">
+                    {availableObjects.map(obj => (
+                      <div
+                        key={obj}
+                        className={`selection-item ${worldConfig.objects.includes(obj) ? 'selected' : ''}`}
+                        onClick={() => toggleObject(obj)}
+                      >
+                        <FaCube />
+                        <span>{obj}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="form-group">
-                    <label>Y</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={robotConfig.pose.position.y}
-                      onChange={(e) => handlePoseChange('y', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Z</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={robotConfig.pose.position.z}
-                      onChange={(e) => handlePoseChange('z', e.target.value)}
-                    />
-                  </div>
-                </div>
+                </section>
 
-                <h3>Orientation (radians / degrees)</h3>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Roll</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={robotConfig.pose.orientation_rpy.roll}
-                      onChange={(e) => handleOrientationChange('roll', e.target.value)}
-                    />
-                    <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.roll)}°</small>
+                {/* Environment Selection */}
+                <section className="config-section">
+                  <h2><FaTree /> Environment</h2>
+                  <div className="selection-grid">
+                    {availableEnvironments.map(env => (
+                      <div
+                        key={env}
+                        className={`selection-item ${worldConfig.environments.includes(env) ? 'selected' : ''}`}
+                        onClick={() => toggleEnvironment(env)}
+                      >
+                        <FaTree />
+                        <span>{env}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="form-group">
-                    <label>Pitch</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={robotConfig.pose.orientation_rpy.pitch}
-                      onChange={(e) => handleOrientationChange('pitch', e.target.value)}
-                    />
-                    <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.pitch)}°</small>
-                  </div>
-                  <div className="form-group">
-                    <label>Yaw</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={robotConfig.pose.orientation_rpy.yaw}
-                      onChange={(e) => handleOrientationChange('yaw', e.target.value)}
-                    />
-                    <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.yaw)}°</small>
-                  </div>
-                </div>
-              </section>
+                </section>
 
-              {/* Robot Spawn Button */}
-              <section className="actions">
-                <button
-                  className="btn btn-success"
-                  onClick={handleSpawnRobot}
-                  disabled={loading}
-                >
-                  <FaPlus /> {loading ? 'Spawning...' : 'Spawn Robot'}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={handleValidate}
-                  disabled={loading}
-                >
-                  <FaCheckCircle /> Validate Config
-                </button>
-              </section>
-            </>
-          )}
+                {/* World Launch Button */}
+                <section className="actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleLaunchWorld}
+                    disabled={loading || worldSessionId}
+                  >
+                    <FaPlay /> {loading ? 'Launching...' : worldSessionId ? 'World Active' : 'Launch World'}
+                  </button>
+                  {worldSessionId && (
+                    <div className="info-box">
+                      <FaCheckCircle className="success-icon" />
+                      <span>World Session: {worldSessionId}</span>
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {/* Robot Configuration Tab */}
+            {activeTab === 'robot' && worldSessionId && (
+              <>
+                <section className="config-section">
+                  <h2><FaRobot /> Robot Configuration</h2>
+                  <div className="info-box">
+                    <FaCheckCircle className="success-icon" />
+                    <span>Active World: {worldSessionId}</span>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Robot Name *</label>
+                      <input
+                        type="text"
+                        value={robotConfig.robot_name}
+                        onChange={(e) => handleRobotInputChange('robot_name', e.target.value)}
+                        placeholder="robot1"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Robot Type</label>
+                      <select
+                        value={robotConfig.robot_type}
+                        onChange={(e) => handleRobotInputChange('robot_type', e.target.value)}
+                      >
+                        <option value="symbot">Symbot</option>
+                        <option value="minibot">Minibot</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <h3>Position (meters)</h3>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>X</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={robotConfig.pose.position.x}
+                        onChange={(e) => handlePoseChange('x', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Y</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={robotConfig.pose.position.y}
+                        onChange={(e) => handlePoseChange('y', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Z</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={robotConfig.pose.position.z}
+                        onChange={(e) => handlePoseChange('z', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <h3>Orientation (radians / degrees)</h3>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Roll</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={robotConfig.pose.orientation_rpy.roll}
+                        onChange={(e) => handleOrientationChange('roll', e.target.value)}
+                      />
+                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.roll)}°</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Pitch</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={robotConfig.pose.orientation_rpy.pitch}
+                        onChange={(e) => handleOrientationChange('pitch', e.target.value)}
+                      />
+                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.pitch)}°</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Yaw</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={robotConfig.pose.orientation_rpy.yaw}
+                        onChange={(e) => handleOrientationChange('yaw', e.target.value)}
+                      />
+                      <small>{radiansToDegrees(robotConfig.pose.orientation_rpy.yaw)}°</small>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Robot Spawn Button */}
+                <section className="actions">
+                  <button
+                    className="btn btn-success"
+                    onClick={handleSpawnRobot}
+                    disabled={loading}
+                  >
+                    <FaPlus /> {loading ? 'Spawning...' : 'Spawn Robot'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleValidate}
+                    disabled={loading}
+                  >
+                    <FaCheckCircle /> Validate Config
+                  </button>
+                </section>
+              </>
+            )}
+          </div>
 
           {/* Messages */}
           {error && <div className="message error">{error}</div>}
